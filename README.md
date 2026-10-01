@@ -45,15 +45,25 @@ D:\Digitalizační_pracoviště\
 
 ## Instalace (jednorázově)
 
-1. Nainstalujte **Python 3.10+** z python.org (ponechte zaškrtnuté *tcl/tk* – grafické rozhraní).
-2. Stáhněte aplikaci – na GitHubu **Code → Download ZIP** (nebo `git clone`) – a rozbalte ji
-   do `D:\Digitalizační_pracoviště\TOOLS\Inventa\`. Jiné umístění funguje také, jen upravte cesty v kroku 4.
-3. Do `tools\` vložte portable ExifTool podle [tools/README.md](tools/README.md).
-4. V `config\presets.json` nastavte `paths.scans_root` (vstupní složka) a `paths.archive_root` (síťový archiv).
-5. Spusťte `Inventa.bat` (dvojklik). Při prvním spuštění vytvoří `.venv` a nainstaluje jedinou
-   závislost – Pillow (vyžaduje internet). Poté otevře okno aplikace; černá konzole se sama zavře.
+1. Nainstalujte **Python 3.10+** z [python.org](https://www.python.org/downloads/windows/)
+   (ponechte zaškrtnuté *tcl/tk and IDLE* a *py launcher* – obojí je výchozí).
+2. Stáhněte poslední verzi z [Releases](../../releases/latest) – soubor **Source code (zip)**.
+3. Před rozbalením ZIPu: pravý klik → **Vlastnosti** → zaškrtněte **Odblokovat** → OK.
+   (Jinak Windows u staženého `Inventa.bat` zobrazí varování SmartScreen.)
+4. Rozbalte ZIP a vzniklou složku (např. `Digitalizace_App-0.1.0`) přejmenujte na `Inventa`
+   a přesuňte do `D:\Digitalizační_pracoviště\TOOLS\`. Jiné umístění funguje také, jen upravte cesty v kroku 6.
+5. Do složky `tools\` vložte portable ExifTool podle [tools/README.md](tools/README.md).
+6. V `config\presets.json` nastavte `paths.scans_root` (vstupní složka se skeny) a `paths.archive_root`
+   (síťový archiv). Lomítka pište jako `/`, např. `"D:/Digitalizační_pracoviště/SCANS/MUZEUM/Pracovníci"`.
+7. Spusťte `Inventa.bat` (dvojklik). Při prvním spuštění vytvoří `.venv` a nainstaluje jedinou
+   závislost – Pillow (vyžaduje internet, trvá cca minutu). Poté otevře okno aplikace; černá konzole se sama zavře.
+8. V levém panelu **Stav systému** by měly všechny položky svítit zeleně. Červená položka ukazuje,
+   kterou cestu nebo nástroj je potřeba opravit; po úpravě klikněte na **Obnovit / načíst konfiguraci**.
 
 Tip: na plochu vytvořte zástupce na `Inventa.bat`.
+
+**Aktualizace na novou verzi:** stáhněte nový ZIP a přepište jím složku `Inventa` – kromě
+`config\presets.json` (vaše nastavení), `tools\` (ExifTool) a `app_logs\` (audit).
 
 ## Životní cyklus dávky
 
@@ -132,12 +142,11 @@ Záložka **Historie a logy** zobrazuje všechny auditní záznamy z `app_logs`:
 
 Screenshoty v `docs/` jsou pořízené na fiktivních datech (smyšlení pracovníci, instituce i inventární čísla).
 
-## Vývoj a testy
+## Vývoj
 
 ```bash
-python -m pip install -r requirements-dev.txt   # na Windows: "pip" samotný často není v PATH
-python -m pytest            # testy s ExifToolem se přeskočí, pokud není v PATH
-python src/gui.py           # spuštění okna s konzolí (vidíte případné chyby)
+python -m pip install -r requirements.txt   # na Windows: "pip" samotný často není v PATH
+python src/gui.py                           # spuštění okna s konzolí (vidíte případné chyby)
 ```
 
 ## Licence

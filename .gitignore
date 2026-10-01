@@ -15,3 +15,5 @@ tools/*
 .idea/
 Thumbs.db
 desktop.ini
+# Testy jsou jen lokálně, do repozitáře se nenahrávají
+tests/
