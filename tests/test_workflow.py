@@ -1,16 +1,16 @@
 import json
-import subprocess
 
 from conftest import PRESET, batch_dir, make_tiff, requires_exiftool
 
+import metadata
 import workflow
 
 WORKER, BATCH = "Jana Nováková", "2026-09-29"
 
 
 def read_tags(path):
-    out = subprocess.run(["exiftool", "-j", "-G1", "-XMP-dc:all", str(path)], capture_output=True, check=True)
-    return json.loads(out.stdout)[0]
+    # přes argfile jako aplikace – cesta s diakritikou na příkazové řádce ExifTool na Windows nepřečte
+    return metadata.read_metadata("exiftool", path, ["XMP-dc:all"])
 
 
 def test_listing(workspace):
