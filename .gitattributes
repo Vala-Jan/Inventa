@@ -1,0 +1,6 @@
+*.bat text eol=crlf
+*.py  text eol=lf
+*.json text eol=lf
+*.tif binary
+*.tiff binary
+*.exe binary

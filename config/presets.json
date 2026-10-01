@@ -1,0 +1,52 @@
+{
+  "_comment": "Konfigurace Inventa. Relativní cesty se počítají od složky aplikace (Inventa). Po úpravě stačí v GUI kliknout na 'Znovu načíst konfiguraci'.",
+
+  "paths": {
+    "scans_root": "D:/Digitalizační_pracoviště/SCANS/MUZEUM/Pracovníci",
+    "prepared": "PREPARED",
+    "logs": "app_logs",
+    "archive_root": "Z:/Digitalizace",
+    "exiftool": "tools/exiftool.exe"
+  },
+
+  "batch": {
+    "ignored_files": ["Thumbs.db", "desktop.ini", ".DS_Store"],
+    "tiff_extensions": [".tif", ".tiff"]
+  },
+
+  "transfer": {
+    "_comment_mode": "verify_then_delete = robocopy kopíruje, aplikace ověří SHA-256 na cíli a teprve potom smaže zdroj (bezpečné). robocopy_move = robocopy /MOVE (zdroj smaže robocopy) + následné ověření SHA-256 na cíli.",
+    "mode": "verify_then_delete",
+    "_comment_subpath": "Podsložka v archivu. Prázdné = naplocho do archive_root. Lze použít {worker} a {batch}.",
+    "archive_subpath": "",
+    "robocopy_retries": 2,
+    "robocopy_wait_seconds": 5
+  },
+
+  "presets": {
+    "Diapozitivy 600 DPI": {
+      "description": "Diapozitivy, min. 600 DPI, barevné i černobílé skeny.",
+      "min_dpi": 600,
+      "allowed_color_modes": ["RGB", "Grayscale"],
+      "allowed_bit_depths": null,
+      "allowed_compressions": null,
+      "deep_check": false,
+      "metadata": {
+        "XMP-dc:Identifier": "{inventory}",
+        "XMP-dc:Description": "{inventory}"
+      }
+    },
+    "Obecný – 400 DPI (ukázka)": {
+      "description": "UKÁZKOVÝ preset – upravte podle skutečných pravidel sbírky.",
+      "min_dpi": 400,
+      "allowed_color_modes": ["RGB", "Grayscale"],
+      "allowed_bit_depths": [8, 16],
+      "allowed_compressions": ["raw", "tiff_lzw"],
+      "deep_check": true,
+      "metadata": {
+        "XMP-dc:Identifier": "{inventory}",
+        "XMP-dc:Description": "{inventory}"
+      }
+    }
+  }
+}

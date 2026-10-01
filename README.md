@@ -1,0 +1,146 @@
+# Inventa
+
+**Inventa – validation, metadata & ingest pipeline for museum digitization**
+
+Desktopová aplikace pro Windows (běžné okno – **žádný server, localhost ani prohlížeč**) pro digitalizaci
+muzejních sbírek. Kontroluje TIFF skeny, zapisuje Dublin Core metadata přes ExifTool, vede auditní
+logy a na pokyn obsluhy přenáší hotové soubory na síťový archiv.
+
+![Zpracování dávky](docs/zpracovani.png)
+
+![Kontrola dávky s chybami](docs/kontrola.png)
+
+![Dvoukrokové odeslání do archivu](docs/prenos.png)
+
+## Umístění a struktura
+
+Aplikace patří do `D:\Digitalizační_pracoviště\TOOLS\Inventa\` (tento repozitář).
+Skeny pracovníků jsou v `D:\Digitalizační_pracoviště\SCANS\<INSTITUCE>\Pracovníci\` (cesta se nastavuje v `config\presets.json`).
+
+```text
+D:\Digitalizační_pracoviště\
+├── TOOLS\
+│   └── Inventa\                <-- tento repozitář
+│       ├── config\presets.json  pravidla (cesty, presety, DPI, metadata)
+│       ├── src\
+│       │   ├── gui.py           desktopové okno (Tkinter – součást Pythonu)
+│       │   ├── validator.py     kontrola TIFF / DPI / barev. režimu / názvu (Pillow)
+│       │   ├── metadata.py      zápis + zpětné ověření metadat (ExifTool)
+│       │   ├── logger.py        auditní JSON + .log, system_runner.log
+│       │   ├── workflow.py      řízení celé dávky (kontrola -> metadata -> PREPARED -> archiv)
+│       │   └── config.py        načtení a kontrola presets.json
+│       ├── tools\exiftool.exe   portable ExifTool (stáhnout zvlášť, viz tools\README.md)
+│       ├── app_logs\            věčný audit (nikdy se nepřepisuje)
+│       ├── PREPARED\            pouze čisté, zpracované TIFFy (naplocho)
+│       └── Inventa.bat          spuštění aplikace (dvojklik)
+└── SCANS\<INSTITUCE>\Pracovníci\<Pracovník>\<YYYY-MM-DD>\   vstup od obsluhy
+```
+
+## Požadavky
+
+* Windows 10 nebo 11
+* Python 3.10 nebo novější (s Tkinterem – na python.org je výchozí součástí instalace)
+* [ExifTool](https://exiftool.org/) (portable verze pro Windows, stahuje se zvlášť)
+* pro odesílání do archivu síťový disk připojený pod písmenem (výchozí `Z:`)
+
+## Instalace (jednorázově)
+
+1. Nainstalujte **Python 3.10+** z python.org (ponechte zaškrtnuté *tcl/tk* – grafické rozhraní).
+2. Stáhněte aplikaci – na GitHubu **Code → Download ZIP** (nebo `git clone`) – a rozbalte ji
+   do `D:\Digitalizační_pracoviště\TOOLS\Inventa\`. Jiné umístění funguje také, jen upravte cesty v kroku 4.
+3. Do `tools\` vložte portable ExifTool podle [tools/README.md](tools/README.md).
+4. V `config\presets.json` nastavte `paths.scans_root` (vstupní složka) a `paths.archive_root` (síťový archiv).
+5. Spusťte `Inventa.bat` (dvojklik). Při prvním spuštění vytvoří `.venv` a nainstaluje jedinou
+   závislost – Pillow (vyžaduje internet). Poté otevře okno aplikace; černá konzole se sama zavře.
+
+Tip: na plochu vytvořte zástupce na `Inventa.bat`.
+
+## Životní cyklus dávky
+
+| Krok | Co se děje |
+|---|---|
+| 1. Vstup | Obsluha nahraje TIFFy do `SCANS\<INSTITUCE>\Pracovníci\<Jméno>\<YYYY-MM-DD>\`. |
+| 2. Výběr | V okně aplikace zvolíte pracovníka, dávku a preset. |
+| 2b. Kontrola nanečisto | Tlačítko **Zkontrolovat (bez zápisu)** projde *všechny* soubory a ukáže všechny chyby najednou. Nic nemění a nezapisuje do auditu. |
+| 3. Validace | **Zpracovat dávku**: přípona `.tif/.tiff`, skutečný formát TIFF, DPI ≥ minimum, barevný režim, (volitelně) bitová hloubka a komprese, tvar názvu a extrakce inventárního čísla (viz níže). **První chyba dávku okamžitě zastaví** (červená hláška + chybové okno + detail v logu). |
+| 4. Metadata | Teprve když projdou *všechny* soubory, ExifTool zapíše `XMP-dc:Identifier` a `XMP-dc:Description`. Zápis se hned zpětně přečte a ověří. SHA-256 se počítá před zápisem i po něm. |
+| 5. PREPARED | TIFFy se přesunou **naplocho** do `PREPARED\` (`Thumbs.db` apod. se zahodí, prázdná složka dávky se odstraní). Pokud už v PREPARED soubor se stejným názvem je, dávka se zastaví dřív, než se cokoli změní. |
+| 6. Audit | `app_logs\runner_YYYY-MM-DD_Jmeno-Prijmeni.json` (strojový, pro import do SQL) + `.log` (časová osa). Při opakování vznikne `_run2`, `_run3`, … Nic se nepřepisuje. |
+| 7. Archiv | **Nikdy neproběhne automaticky.** Obsluha v záložce **Odeslání do archivu** vybere dávky, klikne **Připravit odeslání**, zkontroluje souhrn a teprve druhým krokem **Potvrdit a odeslat** spustí přenos: robocopy na `Z:\…` (naplocho), ověření SHA-256 v cíli proti auditu, pak smazání z PREPARED. Log `upload_YYYY-MM-DD.json/.log`. |
+
+## Presety (`config/presets.json`)
+
+```jsonc
+"Diapozitivy 600 DPI": {
+  "min_dpi": 600,
+  "allowed_color_modes": ["RGB", "Grayscale"],   // RGB, Grayscale, Bitonal, CMYK, RGBA
+  "allowed_bit_depths": null,                     // např. [8, 16]; null = nekontroluje se
+  "allowed_compressions": null,                   // např. ["raw", "tiff_lzw"]
+  "deep_check": false,                            // true = plné dekódování (odhalí poškozené soubory, pomalejší)
+  "metadata": {
+    "XMP-dc:Identifier": "{inventory}",
+    "XMP-dc:Description": "{inventory}"          // ABC-01X-DIA001--001.tif -> "DIA001"
+  }
+}
+```
+
+* **Inventární číslo** se bere vždy z názvu souboru stejným pravidlem pro všechny presety:
+  úsek mezi posledním `-` a `--`. Tvar názvu: `<cokoli>-<inventární číslo>--<pořadí>.tif`.
+
+  | Název | Inventární číslo |
+  |---|---|
+  | `ABC-01X-DIA001--001.tif` | `DIA001` |
+  | `ABC-01X-FOT123--002.tif` | `FOT123` |
+  | `DIA001--001.tif`, `ABC-01X-DIA001-001.tif` | chyba – nelze určit |
+
+* V šablonách metadat lze použít `{inventory}`, `{prefix}` (část před inv. číslem), `{sequence}` (pořadí),
+  `{worker}`, `{batch}`, `{preset}` a `{filename}`.
+* Chybu v `presets.json` aplikace ohlásí červeně i s popisem (řádek, neznámý režim, …).
+* Úplná kopie presetu se ukládá do každého JSON logu, takže audit zůstane srozumitelný i po změně pravidel.
+
+## Historie a logy
+
+Záložka **Historie a logy** zobrazuje všechny auditní záznamy z `app_logs`:
+
+* **Typ** `runner` = zpracování dávky, `upload` = přenos do archivu.
+* **Hledat** – hledá v názvu logu, pracovníkovi, dávce, presetu, názvech souborů, inventárních číslech
+  i textech chyb (více slov = musí platit všechna). `Esc` vymaže hledání.
+* **Filtry** podle typu, stavu, pracovníka a data (od–do), tlačítko **Zrušit filtry**.
+* Klik na záhlaví sloupce řadí (▲/▼), výchozí je nejnovější nahoře.
+
+![Historie a logy](docs/historie.png)
+
+* Vybraný log se zobrazí dole – chybové řádky červeně, hledaný výraz žlutě. Dvojklik nebo
+  **Otevřít .log / .json** otevře soubor v systému.
+
+## Bezpečnostní a provozní poznámky
+
+* **Diakritika v cestách** (`Digitalizační_pracoviště`): ExifTool na Windows nezvládá Unicode
+  argumenty z příkazové řádky, proto se parametry předávají přes UTF-8 argfile (`-@`) a `-charset filename=utf8`.
+* **Přenos do archivu** probíhá ve výchozím režimu `verify_then_delete`: robocopy soubory zkopíruje,
+  aplikace ověří SHA-256 přímo na `Z:` a teprve potom smaže zdroj v PREPARED. Režim `robocopy_move`
+  (čisté `/MOV`) je k dispozici, ale při chybě ověření by zdroj už neexistoval.
+* Přenos odmítne soubor, ke kterému neexistuje úspěšný auditní záznam, nebo který se po zpracování změnil.
+  Nikdy nepřepíše jiný soubor se stejným názvem v archivu; identickou kopii (např. po přerušeném přenosu) jen ověří.
+* Aplikace je čistě desktopová: neotevírá žádný síťový port a nic neodesílá mimo síťový archiv.
+* Během zpracování/přenosu okno dál reaguje (práce běží na pozadí). Zavření okna uprostřed operace
+  vyžaduje potvrzení.
+* Zápis metadat mění TIFFy na místě (`-overwrite_original`). Pokud dávka selže až při zápisu
+  metadat, část souborů už metadata mít může. Opakované zpracování je bezpečné (zapisují se stejné hodnoty).
+
+## Ukázková data
+
+Screenshoty v `docs/` jsou pořízené na fiktivních datech (smyšlení pracovníci, instituce i inventární čísla).
+
+## Vývoj a testy
+
+```bash
+python -m pip install -r requirements-dev.txt   # na Windows: "pip" samotný často není v PATH
+python -m pytest            # testy s ExifToolem se přeskočí, pokud není v PATH
+python src/gui.py           # spuštění okna s konzolí (vidíte případné chyby)
+```
+
+## Licence
+
+[MIT](LICENSE) – aplikaci můžete volně používat, upravovat i šířit, jen zachovejte text licence.
+Bez záruky: před nasazením na ostrá data si ověřte, že presety odpovídají pravidlům vaší sbírky.

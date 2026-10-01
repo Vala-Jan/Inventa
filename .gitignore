@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Provozní data – nepatří do gitu
+app_logs/*
+!app_logs/.gitkeep
+PREPARED/*
+!PREPARED/.gitkeep
+# ExifTool se stahuje zvlášť (viz tools/README.md)
+tools/*
+!tools/README.md
+# Editory a OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
