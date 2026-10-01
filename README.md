@@ -14,14 +14,15 @@ logy a na pokyn obsluhy přenáší hotové soubory na síťový archiv.
 
 ## Umístění a struktura
 
-Aplikace patří do `D:\Digitalizační_pracoviště\TOOLS\Inventa\` (tento repozitář).
-Skeny pracovníků jsou v `D:\Digitalizační_pracoviště\SCANS\<INSTITUCE>\Pracovníci\` (cesta se nastavuje v `config\presets.json`).
+Doporučené uspořádání je níže – není ale povinné. Kde jsou skeny, síťový archiv a další složky,
+si nastavíte přímo v aplikaci (tlačítko **Nastavit cesty…**).
 
 ```text
 D:\Digitalizační_pracoviště\
 ├── TOOLS\
 │   └── Inventa\                <-- tento repozitář
-│       ├── config\presets.json  pravidla (cesty, presety, DPI, metadata)
+│       ├── config\presets.json  pravidla (presety, DPI, metadata, výchozí cesty)
+│       ├── config\settings.json cesty nastavené v aplikaci (vznikne po prvním uložení)
 │       ├── src\
 │       │   ├── gui.py           desktopové okno (Tkinter – součást Pythonu)
 │       │   ├── validator.py     kontrola TIFF / DPI / barev. režimu / názvu (Pillow)
@@ -50,20 +51,26 @@ D:\Digitalizační_pracoviště\
 2. Stáhněte poslední verzi z [Releases](../../releases/latest) – soubor **Source code (zip)**.
 3. Před rozbalením ZIPu: pravý klik → **Vlastnosti** → zaškrtněte **Odblokovat** → OK.
    (Jinak Windows u staženého `Inventa.bat` zobrazí varování SmartScreen.)
-4. Rozbalte ZIP a vzniklou složku (např. `Digitalizace_App-0.1.0`) přejmenujte na `Inventa`
-   a přesuňte do `D:\Digitalizační_pracoviště\TOOLS\`. Jiné umístění funguje také, jen upravte cesty v kroku 6.
+4. Rozbalte ZIP a vzniklou složku (např. `Inventa-0.1.0`) přejmenujte na `Inventa` a přesuňte ji,
+   kam potřebujete – doporučeně do `D:\Digitalizační_pracoviště\TOOLS\`.
 5. Do složky `tools\` vložte portable ExifTool podle [tools/README.md](tools/README.md).
-6. V `config\presets.json` nastavte `paths.scans_root` (vstupní složka se skeny) a `paths.archive_root`
-   (síťový archiv). Lomítka pište jako `/`, např. `"D:/Digitalizační_pracoviště/SCANS/MUZEUM/Pracovníci"`.
-7. Spusťte `Inventa.bat` (dvojklik). Při prvním spuštění vytvoří `.venv` a nainstaluje jedinou
+6. Spusťte `Inventa.bat` (dvojklik). Při prvním spuštění vytvoří `.venv` a nainstaluje jedinou
    závislost – Pillow (vyžaduje internet, trvá cca minutu). Poté otevře okno aplikace; černá konzole se sama zavře.
+7. Při prvním spuštění se otevře okno **Nastavení cest**. Tlačítkem **Procházet…** vyberte:
+   * **Vstupní složka se skeny** – složka, ve které má každý pracovník svou podsložku s dávkami,
+     např. `D:\Digitalizační_pracoviště\SCANS\MUZEUM\Pracovníci`,
+   * **Síťový archiv** – kam se odesílají hotové soubory, např. `Z:\Digitalizace`.
+
+   PREPARED, logy a ExifTool mají rozumné výchozí hodnoty uvnitř složky aplikace, není třeba je měnit.
+   Cesty lze kdykoli změnit tlačítkem **Nastavit cesty…** v levém panelu; ukládají se do `config\settings.json`.
 8. V levém panelu **Stav systému** by měly všechny položky svítit zeleně. Červená položka ukazuje,
-   kterou cestu nebo nástroj je potřeba opravit; po úpravě klikněte na **Obnovit / načíst konfiguraci**.
+   kterou cestu nebo nástroj je potřeba opravit.
 
 Tip: na plochu vytvořte zástupce na `Inventa.bat`.
 
-**Aktualizace na novou verzi:** stáhněte nový ZIP a přepište jím složku `Inventa` – kromě
-`config\presets.json` (vaše nastavení), `tools\` (ExifTool) a `app_logs\` (audit).
+**Aktualizace na novou verzi:** stáhněte nový ZIP a přepište jím složku `Inventa`. Vaše cesty
+(`config\settings.json`), ExifTool (`tools\`) a audit (`app_logs\`) nový ZIP nepřepíše, protože v něm nejsou.
+Pokud jste upravovali presety, `config\presets.json` si předem zazálohujte.
 
 ## Životní cyklus dávky
 

@@ -17,7 +17,7 @@ from pathlib import Path
 from config import Preset
 
 EXIFTOOL_TIMEOUT = 300  # s, velké TIFFy na pomalém disku
-NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # bez blikajícího okna na Windows
+NO_WINDOW = subprocess.CREATE_NO_WINDOW  # bez blikajícího okna konzole
 
 
 class MetadataError(Exception):
@@ -37,13 +37,6 @@ class ExifToolRun:
 
     def to_dict(self) -> dict:
         return asdict(self)
-
-
-@dataclass
-class MetadataResult:
-    values: dict[str, str]
-    run: ExifToolRun
-    verified: bool = False
 
 
 def _quote(arg: str) -> str:
@@ -137,11 +130,12 @@ def read_metadata(exiftool: str, path: Path, tags: list[str]) -> dict[str, str]:
     return {k: str(v) for k, v in data.items() if k != "SourceFile"}
 
 
-def write_and_verify(exiftool: str, path: Path, values: dict[str, str]) -> MetadataResult:
+def write_and_verify(exiftool: str, path: Path, values: dict[str, str]) -> ExifToolRun:
+    """Zapíše metadata a hned je zpětně přečte; při neshodě vyvolá MetadataError."""
     run = write_metadata(exiftool, path, values)
     read_back = read_metadata(exiftool, path, list(values))
     mismatched = [t for t, v in values.items() if read_back.get(t) != v]
     if mismatched:
         details = "; ".join(f"{t}: očekáváno '{values[t]}', přečteno '{read_back.get(t)}'" for t in mismatched)
         raise MetadataError(f"Ověření zapsaných metadat selhalo – {details}")
-    return MetadataResult(values=values, run=run, verified=True)
+    return run

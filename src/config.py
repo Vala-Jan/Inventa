@@ -10,6 +10,9 @@ from pathlib import Path
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = APP_ROOT / "config" / "presets.json"
+# Cesty, které si uživatel nastaví v aplikaci. Leží vedle presets.json, ale není v gitu,
+# takže je aktualizace aplikace nepřepíše.
+SETTINGS_NAME = "settings.json"
 
 # Přátelské názvy barevných režimů -> režimy Pillow
 COLOR_MODE_MAP = {
@@ -46,10 +49,11 @@ class Preset:
 
 @dataclass
 class Config:
-    scans_root: Path
+    app_root: Path  # relativní cesty se počítají od této složky
+    scans_root: Path | None  # None = uživatel cestu zatím nenastavil
     prepared: Path
     logs: Path
-    archive_root: Path
+    archive_root: Path | None
     exiftool_configured: Path
     ignored_files: set[str]
     tiff_extensions: set[str]
@@ -59,6 +63,7 @@ class Config:
     robocopy_wait_seconds: int
     presets: dict[str, Preset]
     source_path: Path
+    paths_raw: dict[str, str]  # cesty tak, jak jsou zapsané (pro okno Nastavení cest)
 
     def exiftool_path(self) -> str | None:
         """Cesta k ExifToolu: lokální tools/exiftool.exe, jinak 'exiftool' v PATH."""
@@ -66,14 +71,18 @@ class Config:
             return str(self.exiftool_configured)
         return shutil.which("exiftool")
 
+    def missing_paths(self) -> list[str]:
+        """Povinné cesty, které uživatel ještě nenastavil."""
+        return [key for key in ("scans_root", "archive_root") if getattr(self, key) is None]
+
 
 def _resolve(app_root: Path, value: str) -> Path:
     p = Path(value)
-    return p if p.is_absolute() or _looks_like_windows_abs(value) else (app_root / p).resolve()
+    return p if p.is_absolute() else (app_root / p).resolve()
 
 
-def _looks_like_windows_abs(value: str) -> bool:
-    return len(value) >= 3 and value[1] == ":" and value[2] in "/\\"
+def _resolve_optional(app_root: Path, value: str) -> Path | None:
+    return _resolve(app_root, value) if value and value.strip() else None
 
 
 def _require(d: dict, key: str, where: str):
@@ -115,6 +124,25 @@ def _parse_preset(name: str, d: dict) -> Preset:
     )
 
 
+def _load_settings(settings_path: Path) -> dict:
+    if not settings_path.is_file():
+        return {}
+    try:
+        return json.loads(settings_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"{settings_path.name} není platný JSON (řádek {exc.lineno}): {exc.msg}") from exc
+
+
+def save_user_paths(config_path: Path | str, paths: dict[str, str]) -> Path:
+    """Uloží cesty z okna Nastavení cest. Prázdná hodnota = výchozí hodnota z presets.json."""
+    settings_path = Path(config_path).parent / SETTINGS_NAME
+    data = _load_settings(settings_path)
+    merged = {**data.get("paths", {}), **paths}
+    data["paths"] = {key: value for key, value in merged.items() if value.strip()}
+    settings_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return settings_path
+
+
 def load_config(path: Path | str = DEFAULT_CONFIG_PATH, app_root: Path | None = None) -> Config:
     path = Path(path)
     # relativní cesty se počítají od složky aplikace = rodič složky config/
@@ -126,7 +154,7 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH, app_root: Path | None = 
     except json.JSONDecodeError as exc:
         raise ConfigError(f"presets.json není platný JSON (řádek {exc.lineno}, sloupec {exc.colno}): {exc.msg}") from exc
 
-    paths = _require(data, "paths", "kořen")
+    paths = {**_require(data, "paths", "kořen"), **_load_settings(path.parent / SETTINGS_NAME).get("paths", {})}
     batch = data.get("batch", {})
     transfer = data.get("transfer", {})
 
@@ -140,10 +168,11 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH, app_root: Path | None = 
     presets = {name: _parse_preset(name, d) for name, d in presets_raw.items()}
 
     return Config(
-        scans_root=_resolve(app_root, _require(paths, "scans_root", "paths")),
+        app_root=app_root,
+        scans_root=_resolve_optional(app_root, paths.get("scans_root", "")),
         prepared=_resolve(app_root, _require(paths, "prepared", "paths")),
         logs=_resolve(app_root, _require(paths, "logs", "paths")),
-        archive_root=_resolve(app_root, _require(paths, "archive_root", "paths")),
+        archive_root=_resolve_optional(app_root, paths.get("archive_root", "")),
         exiftool_configured=_resolve(app_root, paths.get("exiftool", "tools/exiftool.exe")),
         ignored_files={n.lower() for n in batch.get("ignored_files", [])},
         tiff_extensions={e.lower() for e in batch.get("tiff_extensions", [".tif", ".tiff"])},
@@ -153,4 +182,5 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH, app_root: Path | None = 
         robocopy_wait_seconds=int(transfer.get("robocopy_wait_seconds", 5)),
         presets=presets,
         source_path=path,
+        paths_raw={key: str(value) for key, value in paths.items()},
     )

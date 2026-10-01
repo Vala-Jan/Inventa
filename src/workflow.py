@@ -6,7 +6,6 @@ GUI (gui.py) volá pouze funkce z tohoto modulu, takže celý proces lze testova
 from __future__ import annotations
 
 import hashlib
-import os
 import shutil
 import subprocess
 import threading
@@ -26,6 +25,9 @@ _OPERATION_LOCK = threading.Lock()
 
 ProgressFn = Callable[[float, str], None]
 
+SCANS_NOT_SET = "Není nastavena vstupní složka se skeny – nastavte ji tlačítkem „Nastavit cesty…“."
+ARCHIVE_NOT_SET = "Není nastaven síťový archiv – nastavte ho tlačítkem „Nastavit cesty…“."
+
 
 class WorkflowError(Exception):
     pass
@@ -39,19 +41,20 @@ class BatchResult:
     files: list[dict] = field(default_factory=list)
     json_log: Path | None = None
     text_log: Path | None = None
-    target_dir: Path | None = None
 
 
 # --------------------------------------------------------------------------- výpisy
 
 
 def list_workers(cfg: Config) -> list[str]:
-    if not cfg.scans_root.is_dir():
+    if cfg.scans_root is None or not cfg.scans_root.is_dir():
         return []
     return sorted((p.name for p in cfg.scans_root.iterdir() if p.is_dir()), key=natural_key)
 
 
 def list_batches(cfg: Config, worker: str) -> list[str]:
+    if cfg.scans_root is None:
+        return []
     folder = cfg.scans_root / worker
     if not folder.is_dir():
         return []
@@ -96,6 +99,8 @@ def check_batch(cfg: Config, worker: str, batch: str, preset: Preset) -> tuple[l
 
     Slouží obsluze k nalezení všech chyb najednou před ostrým zpracováním.
     """
+    if cfg.scans_root is None:
+        return [], [SCANS_NOT_SET]
     folder = cfg.scans_root / worker / batch
     if not folder.is_dir():
         return [], [f"Složka dávky neexistuje: {folder}"]
@@ -112,6 +117,8 @@ def check_batch(cfg: Config, worker: str, batch: str, preset: Preset) -> tuple[l
 def process_batch(
     cfg: Config, worker: str, batch: str, preset: Preset, progress: ProgressFn = _noop
 ) -> BatchResult:
+    if cfg.scans_root is None:
+        return BatchResult(False, "FAILED", SCANS_NOT_SET)
     return _exclusive(_process_batch, cfg, worker, batch, preset, progress)
 
 
@@ -185,10 +192,10 @@ def _process_batch(cfg: Config, worker: str, batch: str, preset: Preset, progres
             context = {**check.regex_groups, "worker": worker, "batch": batch,
                        "preset": preset.name, "filename": path.name}
             values = metadata.render_values(preset, context)
-            result = metadata.write_and_verify(exiftool, path, values)
-            record["metadata_written"] = result.values
-            record["metadata_verified"] = result.verified
-            record["exiftool"] = result.run.to_dict()
+            run = metadata.write_and_verify(exiftool, path, values)
+            record["metadata_written"] = values
+            record["metadata_verified"] = True  # jinak by write_and_verify skončila výjimkou
+            record["exiftool"] = run.to_dict()
             record["sha256_after"] = sha256(path)
         except (metadata.MetadataError, OSError) as exc:
             record["ok"] = False
@@ -215,7 +222,7 @@ def _process_batch(cfg: Config, worker: str, batch: str, preset: Preset, progres
 
     json_path, text_path = log.finish("SUCCESS", files=total, target=str(target))
     return BatchResult(True, "SUCCESS", f"Dávka zpracována: {total} souborů přesunuto do PREPARED.",
-                       log.data["files"], json_path, text_path, target)
+                       log.data["files"], json_path, text_path)
 
 
 # --------------------------------------------------------------------------- přenos do archivu
@@ -282,17 +289,7 @@ def archive_dir(cfg: Config, worker: str | None, batch: str | None) -> Path:
 
 
 def _robocopy(cfg: Config, source: Path, target: Path, files: list[str], move: bool) -> list[dict]:
-    """Spustí robocopy (Windows). Na jiném OS použije shutil (kvůli vývoji/testům)."""
-    if os.name != "nt" or not shutil.which("robocopy"):
-        target.mkdir(parents=True, exist_ok=True)
-        for name in files:
-            if move:
-                shutil.move(str(source / name), str(target / name))
-            else:
-                shutil.copy2(source / name, target / name)
-        return [{"command": f"python shutil.{'move' if move else 'copy2'} (robocopy není k dispozici)",
-                 "files": files, "returncode": 0, "output": ""}]
-
+    """Spustí robocopy (součást Windows); cílovou složku robocopy v případě potřeby vytvoří."""
     runs = []
     for start in range(0, len(files), ROBOCOPY_CHUNK):
         chunk = files[start:start + ROBOCOPY_CHUNK]
@@ -310,6 +307,8 @@ def _robocopy(cfg: Config, source: Path, target: Path, files: list[str], move: b
 
 
 def transfer_files(cfg: Config, names: list[str], progress: ProgressFn = _noop) -> BatchResult:
+    if cfg.archive_root is None:
+        return BatchResult(False, "FAILED", ARCHIVE_NOT_SET)
     return _exclusive(_transfer_files, cfg, names, progress)
 
 
@@ -409,4 +408,4 @@ def _transfer_files(cfg: Config, names: list[str], progress: ProgressFn) -> Batc
 
     json_path, text_path = log.finish("SUCCESS", files=total, skipped_already_in_archive=len(already))
     return BatchResult(True, "SUCCESS", f"Přeneseno a ověřeno {total} souborů do {cfg.archive_root}.",
-                       log.data["files"], json_path, text_path, cfg.archive_root)
+                       log.data["files"], json_path, text_path)

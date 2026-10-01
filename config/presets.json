@@ -1,11 +1,12 @@
 {
-  "_comment": "Konfigurace Inventa. Relativní cesty se počítají od složky aplikace (Inventa). Po úpravě stačí v GUI kliknout na 'Znovu načíst konfiguraci'.",
+  "_comment": "Konfigurace Inventa. Relativní cesty se počítají od složky aplikace (Inventa). Po úpravě stačí v GUI kliknout na 'Obnovit / načíst konfiguraci'.",
+  "_comment_paths": "Cesty si uživatel nastaví v aplikaci tlačítkem 'Nastavit cesty…'; uloží se do config/settings.json a mají přednost před hodnotami níže. Prázdné = nenastaveno.",
 
   "paths": {
-    "scans_root": "D:/Digitalizační_pracoviště/SCANS/MUZEUM/Pracovníci",
+    "scans_root": "",
     "prepared": "PREPARED",
     "logs": "app_logs",
-    "archive_root": "Z:/Digitalizace",
+    "archive_root": "",
     "exiftool": "tools/exiftool.exe"
   },
 

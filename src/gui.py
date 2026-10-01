@@ -6,26 +6,25 @@ Dlouhé operace běží ve vlákně na pozadí, okno mezitím reaguje a ukazuje 
 
 from __future__ import annotations
 
+import ctypes
 import os
 import queue
-import subprocess
 import sys
 import threading
 import tkinter as tk
 import traceback
 from pathlib import Path
 from tkinter import font as tkfont
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import metadata  # noqa: E402
 import workflow  # noqa: E402
-from config import DEFAULT_CONFIG_PATH, Config, ConfigError, load_config  # noqa: E402
+from config import DEFAULT_CONFIG_PATH, Config, ConfigError, load_config, save_user_paths  # noqa: E402
 from logger import APP_NAME, APP_VERSION, iter_audit_logs, setup_system_logger  # noqa: E402
 
-APP_TITLE = APP_NAME
 APP_TAGLINE = "validation, metadata & ingest pipeline for museum digitization"
 KIND_LABELS = {"batch": "runner", "transfer": "upload"}
 
@@ -41,21 +40,23 @@ SIDE_BG = "#f1f3f6"
 
 def enable_high_dpi() -> None:
     """Bez tohoto je okno na monitorech se zvětšením 125 % a více rozmazané."""
-    if os.name == "nt":
-        try:
-            import ctypes
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except (AttributeError, OSError):  # starší Windows bez shcore
+        pass
 
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)
-        except (AttributeError, OSError):
-            pass
+
+def is_dir(path: Path | None) -> bool:
+    return path is not None and path.is_dir()
+
+
+def path_text(path: Path | None) -> str:
+    return str(path) if path else "nenastaveno – klikněte na „Nastavit cesty…“"
 
 
 def open_in_system(path: Path) -> None:
     """Otevře soubor/složku v příslušném programu (Průzkumník, Poznámkový blok…)."""
-    if os.name == "nt":
-        os.startfile(path)  # type: ignore[attr-defined]
-    else:
-        subprocess.Popen(["xdg-open", str(path)])
+    os.startfile(path)
 
 
 # --------------------------------------------------------------------------- pomocné widgety
@@ -201,13 +202,76 @@ FILE_COLUMNS = [
 ]
 
 
+PATH_FIELDS = [
+    ("scans_root", "Vstupní složka se skeny", "dir",
+     "složka, ve které má každý pracovník svou podsložku s dávkami (…\\Pracovníci)"),
+    ("archive_root", "Síťový archiv", "dir", "kam se odesílají hotové soubory, např. Z:\\Digitalizace"),
+    ("prepared", "PREPARED", "dir", "mezisklad zpracovaných TIFFů; relativní cesta = uvnitř složky aplikace"),
+    ("logs", "Logy", "dir", "auditní logy; relativní cesta = uvnitř složky aplikace"),
+    ("exiftool", "ExifTool", "file", "exiftool.exe; když soubor neexistuje, použije se exiftool z PATH"),
+]
+
+
+class PathsDialog(tk.Toplevel):
+    """Výběr cest uživatelem. Uloží se do config/settings.json (presets.json se nemění)."""
+
+    def __init__(self, master: "App", cfg: Config, on_save):
+        super().__init__(master)
+        self.title("Nastavení cest")
+        self.transient(master)
+        self.resizable(True, False)
+        self.on_save = on_save
+        self.app_root = cfg.app_root
+        body = ttk.Frame(self, padding=16)
+        body.pack(fill="both", expand=True)
+        body.columnconfigure(1, weight=1)
+        self.vars: dict[str, tk.StringVar] = {}
+        for i, (key, label, kind, hint) in enumerate(PATH_FIELDS):
+            row = 2 * i
+            self.vars[key] = tk.StringVar(value=cfg.paths_raw.get(key, ""))
+            ttk.Label(body, text=label, font=master.font_bold).grid(row=row, column=0, sticky="w",
+                                                                    padx=(0, 10), pady=(8, 0))
+            ttk.Entry(body, textvariable=self.vars[key], width=70).grid(row=row, column=1, sticky="ew", pady=(8, 0))
+            ttk.Button(body, text="Procházet…", command=lambda k=key, t=kind, l=label: self._browse(k, t, l)).grid(
+                row=row, column=2, padx=(8, 0), pady=(8, 0))
+            ttk.Label(body, text=hint, foreground=GREY, font=master.font_small).grid(row=row + 1, column=1, sticky="w")
+        bar = ttk.Frame(body)
+        bar.grid(row=2 * len(PATH_FIELDS), column=0, columnspan=3, sticky="e", pady=(16, 0))
+        ttk.Button(bar, text="Uložit", style="Accent.TButton", command=self._save).pack(side="left")
+        ttk.Button(bar, text="Zrušit", command=self.destroy).pack(side="left", padx=(8, 0))
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.grab_set()
+
+    def _browse(self, key: str, kind: str, title: str) -> None:
+        current = self.vars[key].get().strip()
+        start = Path(current) if current else self.app_root
+        if not start.is_absolute():
+            start = self.app_root / start
+        folder = start if kind == "dir" else start.parent
+        options = {"parent": self, "title": title}
+        if folder.is_dir():
+            options["initialdir"] = str(folder)
+        if kind == "dir":
+            chosen = filedialog.askdirectory(mustexist=True, **options)
+        else:
+            chosen = filedialog.askopenfilename(filetypes=[("Programy", "*.exe"), ("Všechny soubory", "*.*")],
+                                                **options)
+        if chosen:
+            self.vars[key].set(chosen)
+
+    def _save(self) -> None:
+        paths = {key: var.get().strip() for key, var in self.vars.items()}
+        self.destroy()
+        self.on_save(paths)
+
+
 # --------------------------------------------------------------------------- hlavní okno
 
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(APP_TITLE)
+        self.title(APP_NAME)
         self.geometry("1280x820")
         self.minsize(1000, 640)
         self._setup_style()
@@ -222,6 +286,7 @@ class App(tk.Tk):
         self.transfer_groups: dict[str, list[workflow.PreparedFile]] = {}
         self.last_logs: dict[str, Path | None] = {"process": None, "transfer": None}
         self._current_run: RunBox | None = None
+        self._paths_prompted = False  # okno Nastavení cest se samo otevře jen jednou
 
         self.report_callback_exception = self._on_tk_exception
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -263,18 +328,19 @@ class App(tk.Tk):
         self.status_box = ttk.Frame(side, style="Side.TFrame")
         self.status_box.pack(fill="x")
         ttk.Button(side, text="⟳  Obnovit / načíst konfiguraci", command=self.reload).pack(fill="x", pady=(14, 4))
+        ttk.Button(side, text="Nastavit cesty…", command=self.open_paths_dialog).pack(fill="x", pady=4)
         ttk.Button(side, text="Otevřít složku logů",
                    command=lambda: self._open(self.cfg.logs if self.cfg else None)).pack(fill="x", pady=4)
         ttk.Button(side, text="Otevřít PREPARED",
                    command=lambda: self._open(self.cfg.prepared if self.cfg else None)).pack(fill="x", pady=4)
-        ttk.Label(side, text=f"{APP_TITLE}  v{APP_VERSION}", font=self.font_small,
+        ttk.Label(side, text=f"{APP_NAME}  v{APP_VERSION}", font=self.font_small,
                   style="Side.TLabel", foreground="#6b7280").pack(side="bottom", anchor="w")
 
         main = ttk.Frame(self, padding=(16, 10, 16, 10))
         main.pack(side="left", fill="both", expand=True)
         header = ttk.Frame(main)
         header.pack(fill="x", pady=(0, 8))
-        ttk.Label(header, text=APP_TITLE, font=self.font_title).pack(side="left")
+        ttk.Label(header, text=APP_NAME, font=self.font_title).pack(side="left")
         ttk.Label(header, text=f"  –  {APP_TAGLINE}", foreground=GREY).pack(side="left", pady=(6, 0))
         self.config_banner = Banner(main)
 
@@ -489,6 +555,12 @@ class App(tk.Tk):
         self._refresh_transfer()
         self._refresh_history()
         self._render_status()
+        if self.cfg.missing_paths():
+            self.config_banner.show("info", "Nastavte vstupní složku se skeny a síťový archiv – "
+                                            "tlačítko „Nastavit cesty…“ v levém panelu.")
+            if not self._paths_prompted:
+                self._paths_prompted = True
+                self.after(300, self.open_paths_dialog)
 
     def _detect_exiftool(self, path: str | None) -> None:
         self.events.put(("exiftool", metadata.exiftool_version(path), None))
@@ -508,9 +580,9 @@ class App(tk.Tk):
         items = [
             (bool(self.exiftool_ver), "ExifTool",
              f"{exif_state} – {cfg.exiftool_path() or cfg.exiftool_configured}"),
-            (cfg.scans_root.is_dir(), "Vstup (Pracovníci)", str(cfg.scans_root)),
+            (is_dir(cfg.scans_root), "Vstup (Pracovníci)", path_text(cfg.scans_root)),
             (cfg.prepared.is_dir(), "PREPARED", str(cfg.prepared)),
-            (cfg.archive_root.is_dir(), "Síťový archiv", str(cfg.archive_root)),
+            (is_dir(cfg.archive_root), "Síťový archiv", path_text(cfg.archive_root)),
             (cfg.logs.is_dir(), "Logy", str(cfg.logs)),
         ]
         for ok, label, detail in items:
@@ -553,6 +625,8 @@ class App(tk.Tk):
         worker, batch = self.cb_worker.get(), self.cb_batch.get()
         if cfg is None:
             self.folder_info.configure(text="")
+        elif cfg.scans_root is None:
+            self.folder_info.configure(text=workflow.SCANS_NOT_SET)
         elif not worker:
             self.folder_info.configure(text=f"Ve vstupní složce nejsou žádní pracovníci: {cfg.scans_root}")
         elif not batch:
@@ -567,7 +641,8 @@ class App(tk.Tk):
         cfg = self.cfg
         if cfg is None:
             return
-        self.transfer_target.configure(text=f"Cíl: {cfg.archive_root}    ·    režim přenosu: {cfg.transfer_mode}")
+        self.transfer_target.configure(text=f"Cíl: {path_text(cfg.archive_root)}    ·    "
+                                            f"režim přenosu: {cfg.transfer_mode}")
         prepared = workflow.list_prepared(cfg)
         self.transfer_groups = {}
         for f in prepared:
@@ -581,13 +656,15 @@ class App(tk.Tk):
             self.unaudited_banner.hide()
         rows = [
             {"davka": label, "pocet": len(files), "velikost": f"{sum(f.size for f in files) / 1e6:.1f}",
-             "cil": str(workflow.archive_dir(cfg, files[0].worker, files[0].batch))}
+             "cil": str(workflow.archive_dir(cfg, files[0].worker, files[0].batch)) if cfg.archive_root else "–"}
             for label, files in self.transfer_groups.items()
         ]
         self.transfer_table.set_rows(rows, iid_key="davka")
         self.transfer_table.tree.selection_set(list(self.transfer_groups))  # výchozí: vše
         self._cancel_pending_transfer()
-        if not cfg.archive_root.is_dir():
+        if cfg.archive_root is None:
+            self.transfer_banner.show("error", workflow.ARCHIVE_NOT_SET)
+        elif not cfg.archive_root.is_dir():
             self.transfer_banner.show("error", f"Síťový archiv {cfg.archive_root} není dostupný. "
                                                "Připojte síťový disk.")
         elif not rows:
@@ -722,7 +799,7 @@ class App(tk.Tk):
     def _update_buttons(self) -> None:
         ready = self.cfg is not None and not self.busy
         has_batch = ready and bool(self.cb_worker.get() and self.cb_batch.get())
-        archive_ok = ready and self.cfg.archive_root.is_dir()
+        archive_ok = ready and is_dir(self.cfg.archive_root)
         self.btn_check.configure(state="normal" if has_batch else "disabled")
         self.btn_process.configure(state="normal" if has_batch and self.exiftool_ver else "disabled")
         self.btn_prepare.configure(state="normal" if archive_ok and self.transfer_groups else "disabled")
@@ -873,6 +950,24 @@ class App(tk.Tk):
         self._run_background(lambda p: workflow.transfer_files(cfg, names, p), done, self.transfer_run)
 
     # ------------------------------------------------------------------ ostatní
+
+    def open_paths_dialog(self) -> None:
+        if self.busy:
+            return
+        if self.cfg is None:
+            messagebox.showerror("Nastavení cest", "Nejdřív opravte chybu v konfiguraci (presets.json).")
+            return
+        PathsDialog(self, self.cfg, on_save=self._save_paths)
+
+    def _save_paths(self, paths: dict[str, str]) -> None:
+        try:
+            target = save_user_paths(self.cfg.source_path, paths)
+        except OSError as exc:
+            messagebox.showerror("Nastavení cest", f"Nastavení nelze uložit: {exc}")
+            return
+        if self.syslog:
+            self.syslog.info("Cesty uloženy do %s", target)
+        self.reload()
 
     def _open(self, path: Path | None) -> None:
         if path and path.exists():
