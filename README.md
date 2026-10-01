@@ -51,7 +51,7 @@ D:\Digitalizační_pracoviště\
 2. Stáhněte poslední verzi z [Releases](../../releases/latest) – soubor **Source code (zip)**.
 3. Před rozbalením ZIPu: pravý klik → **Vlastnosti** → zaškrtněte **Odblokovat** → OK.
    (Jinak Windows u staženého `Inventa.bat` zobrazí varování SmartScreen.)
-4. Rozbalte ZIP a vzniklou složku (např. `Inventa-0.1.0`) přejmenujte na `Inventa` a přesuňte ji,
+4. Rozbalte ZIP a vzniklou složku (např. `Inventa-0.2.0`) přejmenujte na `Inventa` a přesuňte ji,
    kam potřebujete – doporučeně do `D:\Digitalizační_pracoviště\TOOLS\`.
 5. Do složky `tools\` vložte portable ExifTool podle [tools/README.md](tools/README.md).
 6. Spusťte `Inventa.bat` (dvojklik). Při prvním spuštění vytvoří `.venv` a nainstaluje jedinou

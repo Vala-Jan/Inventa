@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 APP_NAME = "Inventa"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 SYSTEM_LOG_NAME = "system_runner.log"
 LOG_SCHEMA_VERSION = 1
 
