@@ -2,7 +2,7 @@
 
 **Inventa – validation, metadata & ingest pipeline for museum digitization**
 
-Desktopová aplikace pro Windows (běžné okno – **žádný server, localhost ani prohlížeč**) pro digitalizaci
+Desktopová aplikace pro Windows (běžné okno – žádný server, localhost ani prohlížeč) pro digitalizaci
 muzejních sbírek. Kontroluje TIFF skeny, zapisuje Dublin Core metadata přes ExifTool, vede auditní
 logy a na pokyn obsluhy přenáší hotové soubory na síťový archiv.
 
@@ -79,11 +79,11 @@ Pokud jste upravovali presety, `config\presets.json` si předem zazálohujte.
 | 1. Vstup | Obsluha nahraje TIFFy do `SCANS\<INSTITUCE>\Pracovníci\<Jméno>\<YYYY-MM-DD>\`. |
 | 2. Výběr | V okně aplikace zvolíte pracovníka, dávku a preset. |
 | 2b. Kontrola nanečisto | Tlačítko **Zkontrolovat (bez zápisu)** projde *všechny* soubory a ukáže všechny chyby najednou. Nic nemění a nezapisuje do auditu. |
-| 3. Validace | **Zpracovat dávku**: přípona `.tif/.tiff`, skutečný formát TIFF, DPI ≥ minimum, barevný režim, (volitelně) bitová hloubka a komprese, tvar názvu a extrakce inventárního čísla (viz níže). **První chyba dávku okamžitě zastaví** (červená hláška + chybové okno + detail v logu). |
+| 3. Validace | **Zpracovat dávku**: přípona `.tif/.tiff`, skutečný formát TIFF, DPI ≥ minimum, barevný režim, (volitelně) bitová hloubka a komprese, tvar názvu a extrakce inventárního čísla (viz níže). První chyba dávku okamžitě zastaví (červená hláška + chybové okno + detail v logu). |
 | 4. Metadata | Teprve když projdou *všechny* soubory, ExifTool zapíše `XMP-dc:Identifier` a `XMP-dc:Description`. Zápis se hned zpětně přečte a ověří. SHA-256 se počítá před zápisem i po něm. |
-| 5. PREPARED | TIFFy se přesunou **naplocho** do `PREPARED\` (`Thumbs.db` apod. se zahodí, prázdná složka dávky se odstraní). Pokud už v PREPARED soubor se stejným názvem je, dávka se zastaví dřív, než se cokoli změní. |
+| 5. PREPARED | TIFFy se přesunou naplocho do `PREPARED\` (`Thumbs.db` apod. se zahodí, prázdná složka dávky se odstraní). Pokud už v PREPARED soubor se stejným názvem je, dávka se zastaví dřív, než se cokoli změní. |
 | 6. Audit | `app_logs\runner_YYYY-MM-DD_Jmeno-Prijmeni.json` (strojový, pro import do SQL) + `.log` (časová osa). Při opakování vznikne `_run2`, `_run3`, … Nic se nepřepisuje. |
-| 7. Archiv | **Nikdy neproběhne automaticky.** Obsluha v záložce **Odeslání do archivu** vybere dávky, klikne **Připravit odeslání**, zkontroluje souhrn a teprve druhým krokem **Potvrdit a odeslat** spustí přenos: robocopy na `Z:\…` (naplocho), ověření SHA-256 v cíli proti auditu, pak smazání z PREPARED. Log `upload_YYYY-MM-DD.json/.log`. |
+| 7. Archiv | Nikdy neproběhne automaticky. Obsluha v záložce **Odeslání do archivu** vybere dávky, klikne **Připravit odeslání**, zkontroluje souhrn a teprve druhým krokem **Potvrdit a odeslat** spustí přenos: robocopy na `Z:\…` (naplocho), ověření SHA-256 v cíli proti auditu, pak smazání z PREPARED. Log `upload_YYYY-MM-DD.json/.log`. |
 
 ## Presety (`config/presets.json`)
 
@@ -101,7 +101,7 @@ Pokud jste upravovali presety, `config\presets.json` si předem zazálohujte.
 }
 ```
 
-* **Inventární číslo** se bere vždy z názvu souboru stejným pravidlem pro všechny presety:
+* Inventární číslo se bere vždy z názvu souboru stejným pravidlem pro všechny presety:
   úsek mezi posledním `-` a `--`. Tvar názvu: `<cokoli>-<inventární číslo>--<pořadí>.tif`.
 
   | Název | Inventární číslo |
@@ -132,9 +132,9 @@ Záložka **Historie a logy** zobrazuje všechny auditní záznamy z `app_logs`:
 
 ## Bezpečnostní a provozní poznámky
 
-* **Diakritika v cestách** (`Digitalizační_pracoviště`): ExifTool na Windows nezvládá Unicode
+* Diakritika v cestách (`Digitalizační_pracoviště`): ExifTool na Windows nezvládá Unicode
   argumenty z příkazové řádky, proto se parametry předávají přes UTF-8 argfile (`-@`) a `-charset filename=utf8`.
-* **Přenos do archivu** probíhá ve výchozím režimu `verify_then_delete`: robocopy soubory zkopíruje,
+* Přenos do archivu probíhá ve výchozím režimu `verify_then_delete`: robocopy soubory zkopíruje,
   aplikace ověří SHA-256 přímo na `Z:` a teprve potom smaže zdroj v PREPARED. Režim `robocopy_move`
   (čisté `/MOV`) je k dispozici, ale při chybě ověření by zdroj už neexistoval.
 * Přenos odmítne soubor, ke kterému neexistuje úspěšný auditní záznam, nebo který se po zpracování změnil.
