@@ -2,6 +2,8 @@
 
 **Inventa – validation, metadata & ingest pipeline for museum digitization**
 
+[English version](README.en.md)
+
 Desktopová aplikace pro Windows (běžné okno – žádný server, localhost ani prohlížeč) pro digitalizaci
 muzejních sbírek. Kontroluje TIFF skeny, zapisuje Dublin Core metadata přes ExifTool, vede auditní
 logy a na pokyn obsluhy přenáší hotové soubory na síťový archiv.
